@@ -34,7 +34,17 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# Read port from environment (default: 5000)
+PORT = int(os.getenv("APP_PORT", "5000"))
+
 app = FastAPI(title="Smart Recruiter API", redirect_slashes=False, lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.add_middleware(
     CORSMiddleware,

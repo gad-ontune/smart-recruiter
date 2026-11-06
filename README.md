@@ -122,7 +122,7 @@ You can also register new accounts from the Sign Up page.
 ## Quickstart (TL;DR)
 
 > **One-time setup, then start the backend, then start the frontend in a second terminal.**
-> The frontend is hard-wired to the backend URL in `frontend/.env` (`VITE_API_URL=http://localhost:5000/api`), so the **backend must run on port 5000** for the UI to work. Don't change the port unless you also change the `.env`.
+> The frontend is configurable via `VITE_API_URL` in `frontend/.env` (default: `http://localhost:5000/api`). The backend must run on the same port as configured.
 
 **Requirements**
 
@@ -168,6 +168,80 @@ npm run dev              REM http://localhost:5173
 ```
 
 Open <http://localhost:5173> and log in.
+
+## Production Deployment
+
+### Prerequisites
+
+- Python 3.12+
+- PostgreSQL 16+ (or compatible version)
+- Docker & Docker Compose
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ENVIRONMENT` | Set to `production` for production checks | `development` |
+| `APP_PORT` | Backend port (default: `5000`) | `5000` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+psycopg://smartrecruiter:smartrecruiter@localhost:5433/smartrecruiter?sslmode=require` |
+| `JWT_SECRET` | Secret for JWT token signing | `dev-secret-change-me` |
+| `VITE_API_URL` | Frontend API base URL | `http://localhost:5000/api` |
+
+### Deployment Steps
+
+1. **Set environment variables** in your deployment container:
+   ```bash
+   ENV ENVIRONMENT=production
+   ENV APP_PORT=5000
+   ENV DATABASE_URL=postgresql+psycopg://smartrecruiter:smartrecruiter@db:5433/smartrecruiter?sslmode=require
+   ENV JWT_SECRET=your-strong-random-secret
+   ```
+
+2. **Start the backend** (must run on `APP_PORT`):
+   ```bash
+   uvicorn app.main:app --host 0.0.0.0 --port $APP_PORT
+   ```
+
+3. **Start the frontend** (must match the backend port):
+   ```bash
+   npm run dev
+   ```
+
+4. **Verify health**:
+   ```bash
+   curl http://localhost:$APP_PORT/health
+   ```
+
+### Docker Deployment
+
+```bash
+# Build and start with Docker Compose
+docker-compose -f docker-compose.yml up -d
+```
+
+### Key Production Improvements
+
+- **Database migrations** - Alembic configured for schema evolution
+- **Retry logic** - Codewars API calls now retry with exponential backoff
+- **Production settings** - Debug disabled, SSL enabled, connection pooling
+- **Configurable port** - Backend port via `APP_PORT` environment variable
+- **Security** - JWT secret validation, CORS restricted in production
+- **Logging** - Structured logging with INFO level in production
+
+### Scaling
+
+For horizontal scaling:
+- Deploy multiple backend instances behind a load balancer
+- Use a shared PostgreSQL database (already configured)
+- Add Redis for caching and session storage if needed
+- Enable Gunicorn/Uvicorn workers for concurrency
+
+### Monitoring
+
+- Health check endpoint: `GET /health`
+- Database connection pooling configured (20 connections)
+- SSL enabled for PostgreSQL connections
+- Structured logging via Pydantic settings
 
 > **Heads up — port 5000:** the frontend's `frontend/.env` ships pointing at `http://localhost:5000/api`. If you start the backend on a different port, the UI will look broken (every page shows "Failed to fetch"). Either keep the backend on 5000 or update `frontend/.env` and restart `npm run dev`.
 
