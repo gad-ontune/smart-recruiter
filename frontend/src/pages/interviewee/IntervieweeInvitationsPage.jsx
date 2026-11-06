@@ -1,191 +1,216 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import Card from "../../components/common/Card";
+import { useState, useEffect } from "react";
+import { Bell, Check, ArrowRight, Building2, Play, X, CheckCircle2 } from "lucide-react";
 import Button from "../../components/common/Button";
 import Badge from "../../components/common/Badge";
-import EmptyState from "../../components/common/EmptyState";
+import { useNavigate } from "react-router-dom";
+import {
+  invitationService,
+  notificationService,
+  attemptService,
+} from "../../services/assessmentService";
+import { ROUTES } from "../../utils/constants";
 import "./interviewee-invitations.css";
-
-const INVITATIONS = [
-  {
-    id: 1,
-    title: "Frontend Developer Assessment",
-    description:
-      "Test your knowledge of JavaScript, React, HTML, CSS, and frontend development fundamentals.",
-    date: "August 21, 2026",
-    time: "10:00 AM - 11:00 AM",
-    duration: "60 minutes",
-    status: "Pending",
-  },
-  {
-    id: 2,
-    title: "JavaScript Technical Assessment",
-    description:
-      "Complete a technical assessment covering JavaScript fundamentals and problem-solving.",
-    date: "August 24, 2026",
-    time: "2:00 PM - 3:00 PM",
-    duration: "60 minutes",
-    status: "Accepted",
-  },
-  {
-    id: 3,
-    title: "React Developer Assessment",
-    description:
-      "Demonstrate your understanding of React components, hooks, state management, and UI development.",
-    date: "August 27, 2026",
-    time: "11:00 AM - 12:30 PM",
-    duration: "90 minutes",
-    status: "Declined",
-  },
-];
 
 function IntervieweeInvitationsPage() {
   const navigate = useNavigate();
+  const [invitations, setInvitations] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [attemptStatus, setAttemptStatus] = useState({});
 
-  const [invitations, setInvitations] = useState(INVITATIONS);
-  const [confirmation, setConfirmation] = useState(null);
+  useEffect(() => {
+    invitationService
+      .listInvitations()
+      .then(async (data) => {
+        const list = Array.isArray(data) ? data : [];
+        setInvitations(list);
+        const statuses = {};
+        await Promise.all(
+          list
+            .filter((inv) => inv.status === "ACCEPTED")
+            .map(async (inv) => {
+              const res = await attemptService
+                .getAttemptStatus(inv.assessment_id)
+                .catch(() => null);
+              if (res) statuses[inv.assessment_id] = res;
+            })
+        );
+        setAttemptStatus(statuses);
+      })
+      .catch(() => setInvitations([]));
+  }, []);
 
-  const handleAccept = (id) => {
-    setInvitations((previousInvitations) =>
-      previousInvitations.map((invitation) =>
-        invitation.id === id
-          ? { ...invitation, status: "Accepted" }
-          : invitation
-      )
-    );
+  useEffect(() => {
+    notificationService
+      .listNotifications()
+      .then((data) => setNotifications(Array.isArray(data) ? data : []))
+      .catch(() => setNotifications([]));
+  }, []);
 
-    setConfirmation("Invitation accepted successfully.");
+  const isSubmitted = (invitation) =>
+    attemptStatus[invitation.assessment_id]?.locked &&
+    !attemptStatus[invitation.assessment_id]?.active;
+
+  const attemptUsed = (invitation) => {
+    const a = attemptStatus[invitation.assessment_id];
+    return a && a.max_attempts > 0
+      ? `${a.used_attempts ?? 0}/${a.max_attempts} attempt${
+          a.max_attempts === 1 ? "" : "s"
+        } used`
+      : "";
   };
 
-  const handleDecline = (id) => {
-    setInvitations((previousInvitations) =>
-      previousInvitations.map((invitation) =>
-        invitation.id === id
-          ? { ...invitation, status: "Declined" }
-          : invitation
-      )
-    );
+  function accept(id) {
+    const invitation = invitations.find((inv) => inv.invitation_id === id);
+    invitationService
+      .acceptInvitation(id)
+      .then(() => {
+        setInvitations((current) =>
+          current.map((inv) =>
+            inv.invitation_id === id ? { ...inv, status: "ACCEPTED" } : inv
+          )
+        );
+        navigate(ROUTES.ASSESSMENT.replace(":id", invitation?.assessment_id || ""));
+      })
+      .catch(() => {});
+  }
 
-    setConfirmation("Invitation declined.");
-  };
+  function decline(id) {
+    invitationService
+      .declineInvitation(id)
+      .then(() => {
+        setInvitations((current) =>
+          current.map((inv) =>
+            inv.invitation_id === id ? { ...inv, status: "EXPIRED" } : inv
+          )
+        );
+      })
+      .catch(() => {});
+  }
 
-  const getStatusVariant = (status) => {
-    if (status === "Accepted") {
-      return "success";
-    }
-
-    if (status === "Declined") {
-      return "danger";
-    }
-
-    return "warning";
-  };
+  function markAllRead() {
+    const unread = notifications.filter((n) => !n.is_read);
+    unread.forEach((n) => notificationService.markAsRead(n.notification_id).catch(() => {}));
+    setNotifications(notifications.map((n) => ({ ...n, is_read: true })));
+  }
 
   return (
     <div className="interviewee-invitations">
-      <div className="invitations-header">
+      <div className="page-header invitations-header">
         <div>
-          <p className="invitations-label">Interviewee Portal</p>
-          <h1>Assessment Invitations</h1>
-          <p>
-            Review your assessment invitations and manage your upcoming
-            assessments.
-          </p>
+          <p className="breadcrumb">Smart Recruiter / My Invitations</p>
+          <h1>Invitations &amp; Updates</h1>
         </div>
-
-        <Button
-          variant="secondary"
-          onClick={() => navigate("/interviewee/dashboard")}
-        >
-          Back to Dashboard
-        </Button>
       </div>
 
-      {confirmation && (
-        <div className="invitation-confirmation">
-          <Badge variant="success">Success</Badge>
-          <span>{confirmation}</span>
+      <div className="invite-layout">
+        <div className="invite-main">
+          <div className="panel-heading">
+            <h2>Pending Invitations</h2>
+            <Badge variant="info">{invitations.length} awaiting response</Badge>
+          </div>
+
+          {invitations.length === 0 ? (
+            <div className="panel invite-empty">
+              <Check size={28} />
+              <p>You have no pending invitations. New ones will appear here.</p>
+            </div>
+          ) : (
+            <div className="invite-card-list">
+              {[...invitations]
+                .sort(
+                  (a, b) =>
+                    new Date(b.invited_at || 0).getTime() -
+                    new Date(a.invited_at || 0).getTime()
+                )
+                .map((invitation) => (
+                <div className="panel invite-card-row" key={invitation.invitation_id}>
+                  <div className="company-badge">
+                    <Building2 size={22} />
+                  </div>
+                  <div className="invite-content">
+                    <div className="invite-role">
+                      <strong>{invitation.title}</strong>
+                      <span>{invitation.description}</span>
+                    </div>
+                    <p className="invite-meta">
+                      Status:{" "}
+                      {isSubmitted(invitation) ? "Submitted" : invitation.status}
+                      {isSubmitted(invitation) && attemptUsed(invitation)
+                        ? ` (${attemptUsed(invitation)})`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="invite-actions">
+                    {isSubmitted(invitation) ? (
+                      <Button variant="secondary" disabled>
+                        <CheckCircle2 size={16} />
+                        Submitted
+                      </Button>
+                    ) : invitation.status === "PENDING" ? (
+                      <>
+                        <Button variant="secondary" onClick={() => decline(invitation.invitation_id)}>
+                          <X size={16} />
+                          Decline
+                        </Button>
+                        <Button onClick={() => accept(invitation.invitation_id)}>
+                          <Play size={16} />
+                          Accept &amp; Begin
+                        </Button>
+                      </>
+                    ) : (
+                      <Button onClick={() => navigate(ROUTES.ASSESSMENT.replace(":id", invitation.assessment_id))}>
+                        View Assessment
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
         </div>
-      )}
 
-      <div className="invitations-list">
-        {invitations.length === 0 ? (
-          <EmptyState
-            title="No invitations"
-            description="You don't have any assessment invitations at the moment."
-          />
-        ) : (
-          invitations.map((invitation) => (
-            <Card key={invitation.id} padded>
-              <article className="invitation-card">
-                <div className="invitation-card-header">
+        <aside className="invite-side">
+          <div className="notifications-card">
+            <div className="notifications-card-head">
+              <Bell size={18} />
+              <strong>Notifications</strong>
+              <button type="button" onClick={markAllRead} className="mark-all">
+                Mark all as read
+              </button>
+            </div>
+            {notifications.length === 0 ? (
+              <p className="no-notifications">You are all caught up.</p>
+            ) : (
+              [...notifications]
+                .sort(
+                  (a, b) =>
+                    new Date(b.created_at || 0).getTime() -
+                    new Date(a.created_at || 0).getTime()
+                )
+                .map((notification) => (
+                <div className={`notif-item ${notification.is_read ? "read" : ""}`} key={notification.notification_id}>
+                  <span className={`notif-dot ${notification.is_read ? "" : "unread"}`} />
                   <div>
-                    <p className="invitations-label">Assessment Invitation</p>
-                    <h2>{invitation.title}</h2>
-                  </div>
-
-                  <Badge variant={getStatusVariant(invitation.status)}>
-                    {invitation.status}
-                  </Badge>
-                </div>
-
-                <p className="invitation-description">
-                  {invitation.description}
-                </p>
-
-                <div className="invitation-details">
-                  <div>
-                    <span>Date</span>
-                    <strong>{invitation.date}</strong>
-                  </div>
-
-                  <div>
-                    <span>Time</span>
-                    <strong>{invitation.time}</strong>
-                  </div>
-
-                  <div>
-                    <span>Duration</span>
-                    <strong>{invitation.duration}</strong>
-                  </div>
-
-                  <div>
-                    <span>Status</span>
-                    <strong>{invitation.status}</strong>
+                    <strong>{notification.title}</strong>
+                    <span>{notification.message}</span>
                   </div>
                 </div>
+              ))
+            )}
+          </div>
 
-                {invitation.status === "Pending" && (
-                  <div className="invitation-actions">
-                    <Button onClick={() => handleAccept(invitation.id)}>
-                      Accept Invitation
-                    </Button>
-
-                    <Button
-                      variant="secondary"
-                      onClick={() => handleDecline(invitation.id)}
-                    >
-                      Decline
-                    </Button>
-                  </div>
-                )}
-
-                {invitation.status === "Accepted" && (
-                  <div className="invitation-actions">
-                    <Button
-                      onClick={() => navigate("/assessment/1")}
-                    >
-                      View Assessment
-                    </Button>
-                  </div>
-                )}
-              </article>
-            </Card>
-          ))
-        )}
+          <div className="practice-card-side">
+            <h3>Sharpen your skills</h3>
+            <p>Try a trial assessment before the real thing. Free and unlimited.</p>
+            <Button variant="outline" onClick={() => navigate(ROUTES.TRIAL)}>
+              Start Practice <ArrowRight size={16} />
+            </Button>
+          </div>
+        </aside>
       </div>
     </div>
   );
 }
 
-export default IntervieweeInvitationsPage
+export default IntervieweeInvitationsPage;

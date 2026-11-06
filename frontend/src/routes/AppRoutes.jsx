@@ -10,19 +10,27 @@ import NotFoundPage from "../pages/NotFoundPage";
 
 import RecruiterDashboardPage from "../pages/recruiter/RecruiterDashboardPage";
 import RecruiterAssessmentsPage from "../pages/recruiter/RecruiterAssessmentsPage";
-import RecruiterCandidatesPage from "../pages/recruiter/RecruiterCandidatesPage";
+import RecruiterCreateAssessmentPage from "../pages/recruiter/RecruiterCreateAssessmentPage";
+import RecruiterQuestionsPage from "../pages/recruiter/RecruiterQuestionsPage";
+import RecruiterInvitationsPage from "../pages/recruiter/RecruiterInvitationsPage";
+import RecruiterResultsPage from "../pages/recruiter/RecruiterResultsPage";
+import RecruiterGradingPage from "../pages/recruiter/RecruiterGradingPage";
+import RecruiterSettingsPage from "../pages/recruiter/RecruiterSettingsPage";
 
 import IntervieweeDashboardPage from "../pages/interviewee/IntervieweeDashboardPage";
 import IntervieweeAssessmentsPage from "../pages/interviewee/IntervieweeAssessmentsPage";
 import IntervieweeResultsPage from "../pages/interviewee/IntervieweeResultsPage";
 import IntervieweeInvitationsPage from "../pages/interviewee/IntervieweeInvitationsPage";
 import IntervieweeNotificationsPage from "../pages/interviewee/IntervieweeNotificationsPage";
+import IntervieweeSettingsPage from "../pages/interviewee/IntervieweeSettingsPage";
 
 import AssessmentPage from "../pages/assessment/AssessmentPage";
 
 import TrialAssessmentPage from "../pages/trial/TrialAssessmentPage";
 
 import WhiteboardPage from "../pages/whiteboard/WhiteboardPage";
+
+import ProfilePage from "../pages/profile/ProfilePage";
 
 export const router = createBrowserRouter([
   {
@@ -35,7 +43,7 @@ export const router = createBrowserRouter([
       {
         path: ROUTES.LOGIN,
         element: (
-          <AuthLayout subtitle="Sign in to your account">
+          <AuthLayout title="Welcome Back" subtitle="Sign in to manage your technical challenges">
             <LoginPage />
           </AuthLayout>
         ),
@@ -43,7 +51,7 @@ export const router = createBrowserRouter([
       {
         path: ROUTES.REGISTER,
         element: (
-          <AuthLayout subtitle="Create a new account">
+          <AuthLayout title="Create Account" subtitle="Get started with automated assessment tools">
             <RegisterPage />
           </AuthLayout>
         ),
@@ -57,6 +65,10 @@ export const router = createBrowserRouter([
         element: <AppLayout />,
         children: [
           {
+            path: ROUTES.PROFILE,
+            element: <ProfilePage />,
+          },
+          {
             element: <RequireRole roles={[ROLES.RECRUITER]} />,
             children: [
               {
@@ -68,8 +80,28 @@ export const router = createBrowserRouter([
                 element: <RecruiterAssessmentsPage />,
               },
               {
-                path: ROUTES.RECRUITER.CANDIDATES,
-                element: <RecruiterCandidatesPage />,
+                path: ROUTES.RECRUITER.ADD_ASSESSMENT,
+                element: <RecruiterCreateAssessmentPage />,
+              },
+              {
+                path: ROUTES.RECRUITER.QUESTIONS,
+                element: <RecruiterQuestionsPage />,
+              },
+              {
+                path: ROUTES.RECRUITER.INVITATIONS,
+                element: <RecruiterInvitationsPage />,
+              },
+              {
+                path: ROUTES.RECRUITER.RESULTS,
+                element: <RecruiterResultsPage />,
+              },
+              {
+                path: ROUTES.RECRUITER.GRADING,
+                element: <RecruiterGradingPage />,
+              },
+              {
+                path: ROUTES.RECRUITER.SETTINGS,
+                element: <RecruiterSettingsPage />,
               },
             ],
           },
@@ -89,22 +121,33 @@ export const router = createBrowserRouter([
                 element: <IntervieweeResultsPage />,
               },
               {
-                path: "/interviewee/invitations",
+                path: ROUTES.INTERVIEWEE.INVITATIONS,
                 element: <IntervieweeInvitationsPage />,
               },
               {
-                path: "/interviewee/notifications",
+                path: ROUTES.INTERVIEWEE.NOTIFICATIONS,
                 element: <IntervieweeNotificationsPage />,
               },
               {
-                path: "/trial",
+                path: ROUTES.INTERVIEWEE.SETTINGS,
+                element: <IntervieweeSettingsPage />,
+              },
+              {
+                path: ROUTES.INTERVIEWEE.PRACTICE,
                 element: <TrialAssessmentPage />,
               },
-
               {
-                path: "/whiteboard",
-                element: <WhiteboardPage />,
+                path: ROUTES.TRIAL,
+                element: <TrialAssessmentPage />,
               },
+               {
+                 path: ROUTES.WHITEBOARD,
+                 element: <WhiteboardPage />,
+               },
+               {
+                 path: ROUTES.WHITEBOARD_ASSESSMENT,
+                 element: <WhiteboardPage />,
+               },
             ],
           },
           {

@@ -1,202 +1,244 @@
-import { useEffect, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import Card from "../../components/common/Card";
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { Plus, Search, ArrowRight, Send } from "lucide-react";
+import Button from "../../components/common/Button";
 import Badge from "../../components/common/Badge";
-import { Button } from "../../components/common/Button";
-import PageHeader from "../../components/layout/PageHeader";
-import {
-  fetchAssessments,
-  createAssessment,
-  publishAssessment,
-} from "../../features/assessments/assessmentSlice";
+import { ROUTES } from "../../utils/constants";
+import { assessmentService, questionService } from "../../services/assessmentService";
+import "./recruiter.css";
+
+const DIFFICULTY_TONES = { Hard: "danger", Medium: "warning", Easy: "success" };
+const STATUS_TONES = { PUBLISHED: "success", ARCHIVED: "neutral", DRAFT: "warning" };
+
+const DIFFICULTY_RANK = { Easy: 1, Medium: 2, Hard: 3 };
+
+function deriveAssessmentDifficulty(questions) {
+  if (!Array.isArray(questions) || questions.length === 0) return "Medium";
+  let hardest = "Easy";
+  for (const q of questions) {
+    const d = q.difficulty || "Medium";
+    if ((DIFFICULTY_RANK[d] || 0) > (DIFFICULTY_RANK[hardest] || 0)) {
+      hardest = d;
+    }
+  }
+  return hardest;
+}
 
 function RecruiterAssessmentsPage() {
-  const dispatch = useDispatch();
-  const { items, status, error } = useSelector((state) => state.assessments);
+  const [query, setQuery] = useState("");
+  const [difficulty, setDifficulty] = useState("All");
+  const [assessments, setAssessments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [publishingId, setPublishingId] = useState(null);
 
-  const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState("");
-  const [timeLimit, setTimeLimit] = useState(60);
+  const difficulties = ["All", "Easy", "Medium", "Hard"];
 
   useEffect(() => {
-    dispatch(fetchAssessments());
-  }, [dispatch]);
+    async function fetchAssessments() {
+      try {
+        setLoading(true);
+        const data = await assessmentService.listMyAssessments();
+        if (!Array.isArray(data)) throw new Error("Failed to fetch assessments");
 
-  const handleCreate = async (event) => {
-    event.preventDefault();
+        const withQuestions = await Promise.all(
+          data.map(async (a) => {
+            try {
+              const qData = await questionService.listQuestions(
+                a.assessment_id
+              );
+              const questions = (qData && Array.isArray(qData)) ? qData : [];
+              return {
+                ...a,
+                questions: questions.length,
+                difficulty: deriveAssessmentDifficulty(questions),
+              };
+            } catch {
+              return { ...a, questions: 0, difficulty: "Medium" };
+            }
+          })
+        );
 
-    if (!title.trim()) return;
+        setAssessments(withQuestions);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchAssessments();
+  }, []);
 
-    await dispatch(
-      createAssessment({
-        recruiter_id: "u-1",
-        title: title.trim(),
-        time_limit_minutes: Number(timeLimit),
-      })
-    );
+  const filtered = assessments.filter((assessment) => {
+    const matchesSearch = assessment.title
+      .toLowerCase()
+      .includes(query.toLowerCase());
+    const matchesDifficulty =
+      difficulty === "All" || (assessment.difficulty || "Medium") === difficulty;
+    return matchesSearch && matchesDifficulty;
+  });
 
-    setTitle("");
-    setTimeLimit(60);
-    setShowForm(false);
-  };
+  const columns = ["Easy", "Medium", "Hard"].map((label) => ({
+    label,
+    items: filtered.filter(
+      (a) => (a.difficulty || "Medium") === label
+    ),
+  }));
 
-  const handlePublish = (id) => {
-    dispatch(publishAssessment(id));
-  };
+  const visibleColumns =
+    difficulty === "All"
+      ? columns
+      : columns.filter((c) => c.label === difficulty);
+
+  async function handlePublish(id) {
+    setPublishingId(id);
+    try {
+      await assessmentService.publishAssessment(id);
+      setAssessments((prev) =>
+        prev.map((a) =>
+          a.assessment_id === id ? { ...a, status: "PUBLISHED" } : a
+        )
+      );
+    } catch (err) {
+      setError(err.message || "Failed to publish assessment.");
+    } finally {
+      setPublishingId(null);
+    }
+  }
 
   return (
-    <div>
-      <PageHeader
-        title="Assessments"
-        description="Create, edit, publish and manage technical assessments."
-        actions={
-          <Button onClick={() => setShowForm((value) => !value)}>
-            {showForm ? "Cancel" : "Create Assessment"}
+    <div className="recruiter-assessments">
+      <div className="recruiter-toolbar">
+        <div className="page-header">
+          <p className="breadcrumb">Dashboard / Assessments</p>
+          <h1>Assessments</h1>
+        </div>
+        <Link to={ROUTES.RECRUITER.ADD_ASSESSMENT}>
+          <Button>
+            <Plus size={16} />
+            New Assessment
           </Button>
-        }
-      />
+        </Link>
+      </div>
 
-      {showForm && (
-        <Card padded>
-          <h2>Create Assessment</h2>
+      <div className="assessment-filters">
+        <div className="filter-search">
+          <Search size={18} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search assessments..."
+            aria-label="Search assessments"
+          />
+        </div>
+        <div className="filter-pills">
+          {difficulties.map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={`filter-pill ${difficulty === d ? "active" : ""}`}
+              onClick={() => setDifficulty(d)}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      </div>
 
-          <form
-            onSubmit={handleCreate}
-            style={{
-              display: "grid",
-              gap: "var(--space-4)",
-              maxWidth: "32rem",
-            }}
-          >
-            <label>
-              Assessment title
-              <input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="e.g. React Developer Assessment"
-                required
-                style={{
-                  display: "block",
-                  width: "100%",
-                  marginTop: "var(--space-2)",
-                  padding: "var(--space-3)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-md)",
-                }}
-              />
-            </label>
+      {loading && <p>Loading assessments...</p>}
+      {error && <p className="error-message">{error}</p>}
 
-            <label>
-              Time limit (minutes)
-              <input
-                type="number"
-                min="1"
-                value={timeLimit}
-                onChange={(event) => setTimeLimit(event.target.value)}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  marginTop: "var(--space-2)",
-                  padding: "var(--space-3)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "var(--radius-md)",
-                }}
-              />
-            </label>
-
-            <Button type="submit">Create Assessment</Button>
-          </form>
-        </Card>
+      {!loading && !error && filtered.length === 0 && (
+        <div className="empty-state">
+          <p>No assessments found.</p>
+        </div>
       )}
 
-      {status === "loading" && <p>Loading assessments...</p>}
-
-      {error && (
-        <p role="alert" style={{ color: "var(--color-danger)" }}>
-          {error}
-        </p>
-      )}
-
-      {status !== "loading" && items.length === 0 && (
-        <Card padded>
-          <h2>No assessments yet</h2>
-          <p>Create your first technical assessment.</p>
-        </Card>
-      )}
-
-      <div
-        style={{
-          display: "grid",
-          gap: "var(--space-4)",
-          marginTop: "var(--space-5)",
-        }}
-      >
-        {items.map((assessment) => (
-          <Card key={assessment.id}>
-            <Card.Body>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: "var(--space-4)",
-                  flexWrap: "wrap",
-                }}
-              >
-                <div>
-                  <h2 style={{ margin: 0 }}>{assessment.title}</h2>
-
-                  <p
-                    style={{
-                      color: "var(--color-text-muted)",
-                      marginBottom: 0,
-                    }}
-                  >
-                    {assessment.questions?.length ?? 0} questions ·{" "}
-                    {assessment.time_limit_minutes} minutes
-                  </p>
-                </div>
-
-                <Badge
-                  variant={
-                    assessment.status === "published"
-                      ? "success"
-                      : "warning"
-                  }
-                >
-                  {assessment.status === "published"
-                    ? "Published"
-                    : "Draft"}
+      {!loading && !error && filtered.length > 0 && (
+        <div className="assessment-columns">
+          {visibleColumns.map((column) => (
+            <section
+              className={`assessment-column assessment-column-${column.label.toLowerCase()}`}
+              key={column.label}
+            >
+              <div className="assessment-column-head">
+                <h2 className={`assessment-column-title difficulty-${column.label.toLowerCase()}`}>
+                  {column.label}
+                </h2>
+                <Badge variant={DIFFICULTY_TONES[column.label] || "warning"}>
+                  {column.items.length}
                 </Badge>
               </div>
-            </Card.Body>
 
-            <Card.Footer>
-              <div
-                style={{
-                  display: "flex",
-                  gap: "var(--space-2)",
-                  flexWrap: "wrap",
-                }}
-              >
-                {assessment.status === "draft" && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => handlePublish(assessment.id)}
-                  >
-                    Publish
-                  </Button>
-                )}
+              {column.items.length === 0 ? (
+                <p className="assessment-column-empty">
+                  No {column.label.toLowerCase()} assessments
+                </p>
+              ) : (
+                <div className="assessment-column-list">
+                  {column.items.map((assessment) => (
+                    <div className="assessment-card panel" key={assessment.assessment_id}>
+                      <div className="assessment-card-top">
+                        <Badge variant={DIFFICULTY_TONES[assessment.difficulty] || "warning"}>
+                          {assessment.difficulty || "Medium"}
+                        </Badge>
+                        <Badge variant={STATUS_TONES[assessment.status] || "neutral"}>
+                          {assessment.status || "Draft"}
+                        </Badge>
+                      </div>
 
-                <Button variant="outline" size="sm">
-                  Edit
-                </Button>
-              </div>
-            </Card.Footer>
-          </Card>
-        ))}
-      </div>
+                      <h3>{assessment.title}</h3>
+                      {assessment.description && (
+                        <p className="assessment-meta">{assessment.description}</p>
+                      )}
+
+                      <div className="assessment-card-stats">
+                        <span>
+                          <strong>{assessment.questions}</strong> Questions
+                        </span>
+                        <span className="dot-sep">·</span>
+                        <span>
+                          <strong>{assessment.time_limit_minutes}</strong> mins
+                        </span>
+                      </div>
+
+                      <div className="assessment-card-foot">
+                        <Button
+                          size="sm"
+                          onClick={() => handlePublish(assessment.assessment_id)}
+                          disabled={
+                            assessment.status === "PUBLISHED" ||
+                            assessment.questions === 0 ||
+                            publishingId === assessment.assessment_id
+                          }
+                          title={
+                            assessment.status === "PUBLISHED"
+                              ? "This assessment is already published."
+                              : assessment.questions === 0
+                                ? "Add at least one question before publishing."
+                                : "Publish this assessment."
+                          }
+                        >
+                          <Send size={14} />
+                          {assessment.status === "PUBLISHED"
+                            ? "Published"
+                            : publishingId === assessment.assessment_id
+                              ? "Publishing..."
+                              : "Publish"}
+                        </Button>
+                        <Link to={ROUTES.RECRUITER.GRADING} className="link-arrow">
+                          View Results <ArrowRight size={14} />
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

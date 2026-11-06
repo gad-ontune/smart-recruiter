@@ -1,345 +1,151 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Card from "../../components/common/Card";
+import { useAuth } from "../../hooks/useAuth";
+import {
+  resultService,
+  feedbackService,
+} from "../../services/assessmentService";
 import Button from "../../components/common/Button";
 import Badge from "../../components/common/Badge";
-import EmptyState from "../../components/common/EmptyState";
 import "./interviewee-results.css";
-
-const RESULTS = [
-  {
-    id: 1,
-    title: "JavaScript Assessment",
-    date: "August 17, 2026",
-    score: 100,
-    percentage: 100,
-    grade: "A",
-    status: "Passed",
-    released: true,
-    feedbackRead: false,
-    questions: [
-      {
-        question: "Which React hook is used to manage component state?",
-        answer: "useState",
-        correctAnswer: "useState",
-        correct: true,
-        feedback: "Excellent understanding of React state management.",
-      },
-      {
-        question: "What does CSS primarily control?",
-        answer: "The appearance and layout of a webpage",
-        correctAnswer: "The appearance and layout of a webpage",
-        correct: true,
-        feedback: "Correct. You clearly understand the role of CSS.",
-      },
-    ],
-    mentorFeedback:
-      "Excellent work. You demonstrated a strong understanding of JavaScript and React fundamentals. Keep building on this foundation by practicing more advanced state management and API integration.",
-    feedbackTimestamp: "August 18, 2026 at 10:30 AM",
-  },
-  {
-    id: 2,
-    title: "Frontend Development Assessment",
-    date: "August 12, 2026",
-    score: 78,
-    percentage: 78,
-    grade: "B+",
-    status: "Passed",
-    released: true,
-    feedbackRead: true,
-    questions: [
-      {
-        question: "Which HTTP method is commonly used to retrieve data?",
-        answer: "GET",
-        correctAnswer: "GET",
-        correct: true,
-        feedback: "Correct answer.",
-      },
-      {
-        question: "What is the purpose of React components?",
-        answer: "To create reusable UI elements",
-        correctAnswer: "To create reusable UI elements",
-        correct: true,
-        feedback: "Good understanding of reusable components.",
-      },
-    ],
-    mentorFeedback:
-      "Good performance overall. Spend more time practicing complex frontend patterns and component architecture.",
-    feedbackTimestamp: "August 13, 2026 at 2:15 PM",
-  },
-  {
-    id: 3,
-    title: "HTML & CSS Assessment",
-    date: "August 8, 2026",
-    score: 92,
-    percentage: 92,
-    grade: "A",
-    status: "Passed",
-    released: false,
-    feedbackRead: false,
-    questions: [],
-    mentorFeedback: "",
-    feedbackTimestamp: "",
-  },
-];
 
 function IntervieweeResultsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [results, setResults] = useState([]);
+  const [feedbackMap, setFeedbackMap] = useState({});
+  const [loading, setLoading] = useState(true);
 
-  const [selectedResult, setSelectedResult] = useState(RESULTS[0]);
-  const [feedbackRead, setFeedbackRead] = useState(
-    RESULTS[0].feedbackRead
-  );
+  useEffect(() => {
+    if (!user?.user_id) return;
+    let cancelled = false;
 
-  const releasedResults = RESULTS.filter((result) => result.released);
-  const passedResults = RESULTS.filter(
-    (result) => result.status === "Passed"
-  );
+    resultService
+      .listMyResults()
+      .then(async (data) => {
+        const all = Array.isArray(data) ? data : [];
+        if (!cancelled) setResults(all);
 
-  const averageScore =
-    RESULTS.reduce((total, result) => total + result.score, 0) /
-    RESULTS.length;
+        const fbMap = {};
+        for (const r of all) {
+          const fb = await feedbackService
+            .getFeedbackForResult(r.id)
+            .catch(() => []);
+          if (Array.isArray(fb) && fb.length > 0) {
+            const seen = new Set();
+            fbMap[r.id] = fb.filter((item) => {
+              const key = item.answer_id ?? item.feedback_id;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
+          }
+        }
+        if (!cancelled) setFeedbackMap(fbMap);
+      })
+      .catch(() => {
+        if (!cancelled) setResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-  const handleSelectResult = (result) => {
-    setSelectedResult(result);
-    setFeedbackRead(result.feedbackRead);
-  };
-
-  const handleMarkFeedbackRead = () => {
-    setFeedbackRead(true);
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.user_id]);
 
   return (
     <div className="interviewee-results">
-      <div className="results-header">
-        <div>
-          <p className="results-label">Interviewee Portal</p>
-          <h1>Results & Feedback</h1>
-          <p>
-            Review your assessment performance and feedback from mentors.
-          </p>
+      <div className="page-header">
+        <p className="breadcrumb">Smart Recruiter / Assessment Report</p>
+        <h1>My Results</h1>
+        <p className="page-header-desc">
+          Your assessment results will appear here once released by the recruiter.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="panel" style={{ padding: "var(--space-8)", textAlign: "center" }}>
+          <p style={{ color: "var(--color-text-muted)" }}>Loading results...</p>
         </div>
-
-        <Button
-          variant="secondary"
-          onClick={() => navigate("/interviewee/assessments")}
-        >
-          View Assessments
-        </Button>
-      </div>
-
-      <div className="results-summary">
-        <Card padded>
-          <span>Assessments Completed</span>
-          <strong>{RESULTS.length}</strong>
-        </Card>
-
-        <Card padded>
-          <span>Average Score</span>
-          <strong>{Math.round(averageScore)}%</strong>
-        </Card>
-
-        <Card padded>
-          <span>Assessments Passed</span>
-          <strong>{passedResults.length}</strong>
-        </Card>
-
-        <Card padded>
-          <span>Grades Released</span>
-          <strong>{releasedResults.length}</strong>
-        </Card>
-      </div>
-
-      <div className="results-content">
-        <section className="results-list">
-          <div className="section-heading">
-            <div>
-              <h2>Assessment Results</h2>
-              <p>Select an assessment to view its details.</p>
-            </div>
+      ) : results.length === 0 ? (
+        <div className="panel" style={{ padding: "var(--space-8)", textAlign: "center" }}>
+          <h2>No results available yet</h2>
+          <p style={{ color: "var(--color-text-muted)", marginTop: "var(--space-2)" }}>
+            Complete an assessment to see your results here.
+          </p>
+          <div style={{ marginTop: "var(--space-4)" }}>
+            <Button onClick={() => navigate("/interviewee/assessments")}>
+              View My Assessments
+            </Button>
           </div>
-
-          {RESULTS.map((result) => (
-            <Card key={result.id} padded>
-              <button
-                type="button"
-                className={`result-card ${
-                  selectedResult.id === result.id ? "selected" : ""
-                }`}
-                onClick={() => handleSelectResult(result)}
-              >
-                <div className="result-card-main">
-                  <div>
-                    <h3>{result.title}</h3>
-                    <p>Completed {result.date}</p>
+        </div>
+      ) : (
+        <div className="result-card-list">
+          {results.map((result) => {
+            const score = Math.round(result.total_score);
+            const feedbackItems = feedbackMap[result.id] || [];
+            return (
+              <div className="panel result-card" key={result.id}>
+                <div className="result-card-head">
+                  <div className="result-card-title">
+                    <h2>{result.assessment_title}</h2>
+                    <p className="result-meta">
+                      Completed on{" "}
+                      {result.calculated_at
+                        ? new Date(result.calculated_at).toLocaleDateString()
+                        : "N/A"}
+                    </p>
                   </div>
-
-                  <div className="result-card-score">
-                    <strong>{result.percentage}%</strong>
-                    <span>Grade {result.grade}</span>
-                  </div>
-
-                  <Badge
-                    variant={result.released ? "success" : "warning"}
+                  <div
+                    className="score-circle score-tiny"
+                    style={{ "--score": `${score}%` }}
                   >
-                    {result.released ? result.status : "Grade Pending"}
-                  </Badge>
-                </div>
-              </button>
-            </Card>
-          ))}
-        </section>
-
-        <section className="result-details">
-          <Card padded>
-            <div className="details-header">
-              <div>
-                <p className="results-label">Assessment Details</p>
-                <h2>{selectedResult.title}</h2>
-                <p>Completed {selectedResult.date}</p>
-              </div>
-
-              <Badge
-                variant={
-                  selectedResult.released ? "success" : "warning"
-                }
-              >
-                {selectedResult.released
-                  ? selectedResult.status
-                  : "Grade Pending"}
-              </Badge>
-            </div>
-
-            {selectedResult.released ? (
-              <>
-                <div className="score-display">
-                  <div>
-                    <span>Score</span>
-                    <strong>{selectedResult.score}</strong>
-                    <small>out of 100</small>
-                  </div>
-
-                  <div>
-                    <span>Percentage</span>
-                    <strong>{selectedResult.percentage}%</strong>
-                  </div>
-
-                  <div>
-                    <span>Grade</span>
-                    <strong>{selectedResult.grade}</strong>
+                    <div className="score-circle-inner">
+                      <strong>{score}%</strong>
+                      <span>Score</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="completion-status">
-                  <Badge variant="success">Completed</Badge>
-                  <span>
-                    Your grade has been released and is available to view.
-                  </span>
+                <div className="result-status-row">
+                  <div className="result-grade-badge">
+                    <Badge variant={score >= 60 ? "success" : "danger"}>
+                      {score >= 60 ? "Passed" : "Failed"}
+                    </Badge>
+                  </div>
+                  <span className="result-reviewed-tag">Reviewed &amp; graded by recruiter</span>
                 </div>
 
-                {selectedResult.questions.length > 0 && (
-                  <div className="question-results">
-                    <h3>Question Results</h3>
-
-                    {selectedResult.questions.map((item, index) => (
-                      <div
-                        className="question-result"
-                        key={`${selectedResult.id}-${index}`}
-                      >
-                        <div className="question-result-header">
-                          <strong>Question {index + 1}</strong>
-
-                          <Badge
-                            variant={item.correct ? "success" : "danger"}
-                          >
-                            {item.correct ? "Correct" : "Incorrect"}
-                          </Badge>
-                        </div>
-
-                        <p className="question-text">
-                          {item.question}
-                        </p>
-
-                        <div className="answer-box">
-                          <span>Your answer</span>
-                          <strong>{item.answer}</strong>
-                        </div>
-
-                        {!item.correct && (
-                          <div className="answer-box">
-                            <span>Correct answer</span>
-                            <strong>{item.correctAnswer}</strong>
+                {feedbackItems.length > 0 && (
+                  <div className="result-feedback">
+                    <div className="result-feedback-head">
+                      <h3>Recruiter Feedback</h3>
+                    </div>
+                    {feedbackItems.map((fb) => (
+                      <div className="feedback-block" key={fb.feedback_id}>
+                        <p className="feedback-comment">{fb.comment}</p>
+                        {fb.score != null && (
+                          <div className="feedback-score">
+                            <Badge variant="info">Score {fb.score}</Badge>
                           </div>
                         )}
-
-                        <p className="question-feedback">
-                          {item.feedback}
-                        </p>
                       </div>
                     ))}
                   </div>
                 )}
 
-                <div className="feedback-section">
-                  <div className="feedback-heading">
-                    <div>
-                      <h3>Mentor Feedback</h3>
-                      {selectedResult.feedbackTimestamp && (
-                        <span>
-                          {selectedResult.feedbackTimestamp}
-                        </span>
-                      )}
-                    </div>
-
-                    {!feedbackRead && (
-                      <Badge variant="info">Unread</Badge>
-                    )}
-                  </div>
-
-                  {selectedResult.mentorFeedback ? (
-                    <>
-                      <div
-                        className={`mentor-feedback ${
-                          !feedbackRead ? "unread" : ""
-                        }`}
-                      >
-                        <Badge variant="info">Mentor Feedback</Badge>
-
-                        <p>{selectedResult.mentorFeedback}</p>
-                      </div>
-
-                      {!feedbackRead && (
-                        <Button
-                          variant="secondary"
-                          onClick={handleMarkFeedbackRead}
-                        >
-                          Mark as Read
-                        </Button>
-                      )}
-                    </>
-                  ) : (
-                    <EmptyState
-                      title="No feedback yet"
-                      description="Your mentor has not provided feedback for this assessment."
-                    />
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="unreleased-state">
-                <Badge variant="warning">Grade Not Released</Badge>
-
-                <h3>Your assessment has been completed.</h3>
-
-                <p>
-                  Your grade and detailed feedback are still being reviewed.
-                  They will appear here once they have been released.
-                </p>
+                {feedbackItems.length === 0 && (
+                  <p className="result-no-feedback">
+                    No written feedback from the recruiter.
+                  </p>
+                )}
               </div>
-            )}
-          </Card>
-        </section>
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

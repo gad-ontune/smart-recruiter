@@ -1,186 +1,262 @@
-import Card from "../../components/common/Card";
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import {
+  Plus,
+  ArrowRight,
+  CalendarClock,
+  Trophy,
+  Users,
+  Gauge,
+  ClipboardCheck,
+  Loader2,
+} from "lucide-react";
+import Button from "../../components/common/Button";
 import Badge from "../../components/common/Badge";
-import { Button } from "../../components/common/Button";
-import PageHeader from "../../components/layout/PageHeader";
-import { mockAssessments } from "../../data/mock/assessments";
+import { ROUTES } from "../../utils/constants";
+import { assessmentService } from "../../services/assessmentService";
+import { invitationService } from "../../services/assessmentService";
+import "./recruiter.css";
+
+function statusVariant(status) {
+  if (status === "PUBLISHED") return "success";
+  if (status === "ARCHIVED") return "info";
+  return "warning";
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "N/A";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 function RecruiterDashboardPage() {
-  const totalAssessments = mockAssessments.length;
+  const [assessments, setAssessments] = useState([]);
+  const [invitations, setInvitations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const publishedAssessments = mockAssessments.filter(
-    (assessment) => assessment.status === "published"
-  ).length;
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [assessmentsData, invitationsData] = await Promise.all([
+          assessmentService.listMyAssessments(),
+          invitationService.listInvitations(),
+        ]);
+        setAssessments(Array.isArray(assessmentsData) ? assessmentsData : []);
+        setInvitations(Array.isArray(invitationsData) ? invitationsData : []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const draftAssessments = mockAssessments.filter(
-    (assessment) => assessment.status === "draft"
-  ).length;
+    fetchData();
+  }, []);
 
-  const totalQuestions = mockAssessments.reduce(
-    (total, assessment) => total + assessment.questions.length,
-    0
+  const activeAssessments = assessments.filter((a) => a.status === "PUBLISHED");
+  const completedAssessments = assessments.filter(
+    (a) => a.status === "ARCHIVED"
+  );
+  const draftAssessments = assessments.filter((a) => a.status === "DRAFT");
+
+  const acceptedInvitations = invitations.filter(
+    (inv) => inv.status === "ACCEPTED"
   );
 
+  const stats = [
+    {
+      label: "Total Assessments",
+      value: assessments.length,
+      delta: `${activeAssessments.length} active`,
+      icon: Trophy,
+      tone: "blue",
+    },
+    {
+      label: "Accepted Invitations",
+      value: acceptedInvitations.length,
+      delta: `${invitations.length} total sent`,
+      icon: Users,
+      tone: "green",
+    },
+    {
+      label: "Active Assessments",
+      value: activeAssessments.length,
+      delta: `${completedAssessments.length} completed`,
+      icon: Gauge,
+      tone: "amber",
+    },
+    {
+      label: "Draft Assessments",
+      value: draftAssessments.length,
+      delta: draftAssessments.length > 0 ? `${draftAssessments.length} need completion` : "No drafts",
+      icon: ClipboardCheck,
+      tone: "red",
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div className="recruiter-dashboard">
+        <div className="recruiter-toolbar">
+          <div className="page-header">
+            <div>
+              <p className="breadcrumb">Smart Recruiter / Dashboard</p>
+              <h1>Recruiter Overview</h1>
+            </div>
+          </div>
+        </div>
+        <div className="stat-grid">
+          {[1, 2, 3, 4].map((i) => (
+            <div className="stat-card stat-card-loading" key={i}>
+              <Loader2 className="spin-icon" size={24} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="recruiter-dashboard">
+        <div className="recruiter-toolbar">
+          <div className="page-header">
+            <div>
+              <p className="breadcrumb">Smart Recruiter / Dashboard</p>
+              <h1>Recruiter Overview</h1>
+            </div>
+          </div>
+        </div>
+        <div className="stat-grid">
+          <div className="stat-card stat-card-error">
+            <p>Failed to load dashboard data: {error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <PageHeader
-        title="Recruiter Dashboard"
-        description="Overview of your assessments and candidates."
-        actions={<Button>Create Assessment</Button>}
-      />
-
-      {/* Statistics */}
-      <section className="stat-grid" aria-label="Recruiter statistics">
-        <Card className="stat-card">
-          <span className="stat-card-dot stat-dot-primary" />
+    <div className="recruiter-dashboard">
+      <div className="recruiter-toolbar">
+        <div className="page-header">
           <div>
-            <div className="stat-card-value">{totalAssessments}</div>
-            <div className="stat-card-label">Total Assessments</div>
+            <p className="breadcrumb">Smart Recruiter / Dashboard</p>
+            <h1>Recruiter Overview</h1>
           </div>
-        </Card>
+          <Link to={ROUTES.RECRUITER.ADD_ASSESSMENT}>
+            <Button>
+              <Plus size={16} />
+              Create Assessment
+            </Button>
+          </Link>
+        </div>
+      </div>
 
-        <Card className="stat-card">
-          <span className="stat-card-dot stat-dot-success" />
-          <div>
-            <div className="stat-card-value">{publishedAssessments}</div>
-            <div className="stat-card-label">Published Assessments</div>
-          </div>
-        </Card>
-
-        <Card className="stat-card">
-          <span className="stat-card-dot stat-dot-warning" />
-          <div>
-            <div className="stat-card-value">{draftAssessments}</div>
-            <div className="stat-card-label">Draft Assessments</div>
-          </div>
-        </Card>
-
-        <Card className="stat-card">
-          <span className="stat-card-dot stat-dot-info" />
-          <div>
-            <div className="stat-card-value">{totalQuestions}</div>
-            <div className="stat-card-label">Total Questions</div>
-          </div>
-        </Card>
-      </section>
-
-      {/* Main dashboard content */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 2fr) minmax(16rem, 1fr)",
-          gap: "var(--space-6)",
-        }}
-      >
-        {/* Recent assessments */}
-        <Card>
-          <Card.Header>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "var(--space-3)",
-              }}
-            >
-              <div>
-                <h2 style={{ margin: 0 }}>Recent Assessments</h2>
-
-                <p
-                  style={{
-                    margin: "var(--space-1) 0 0",
-                    color: "var(--color-text-muted)",
-                    fontSize: "var(--font-size-sm)",
-                  }}
-                >
-                  Your latest assessment activity.
-                </p>
-              </div>
-
-              <Button variant="outline" size="sm">
-                View All
-              </Button>
+      <div className="stat-grid">
+        {stats.map((stat) => (
+          <div className="stat-card" key={stat.label}>
+            <span className={`stat-card-icon stat-icon-${stat.tone}`}>
+              <stat.icon size={20} />
+            </span>
+            <div>
+              <div className="stat-card-label">{stat.label}</div>
+              <div className="stat-card-value">{stat.value}</div>
+              <div className="stat-card-delta">{stat.delta}</div>
             </div>
-          </Card.Header>
+          </div>
+        ))}
+      </div>
 
-          <Card.Body>
-            <div style={{ display: "grid", gap: "var(--space-3)" }}>
-              {mockAssessments.map((assessment) => (
-                <div
-                  key={assessment.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "var(--space-4)",
-                    padding: "var(--space-4)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "var(--radius-lg)",
-                  }}
-                >
-                  <div>
-                    <h3
-                      style={{
-                        margin: 0,
-                        fontSize: "var(--font-size-base)",
-                      }}
-                    >
-                      {assessment.title}
-                    </h3>
+      <div className="dashboard-columns">
+        <section className="activity-panel">
+          <div className="panel-heading">
+            <h2>Recent Assessment Activity</h2>
+            <Link to={ROUTES.RECRUITER.RESULTS} className="link-arrow">
+              View All <ArrowRight size={14} />
+            </Link>
+          </div>
 
-                    <p
-                      style={{
-                        margin: "var(--space-1) 0 0",
-                        color: "var(--color-text-muted)",
-                        fontSize: "var(--font-size-sm)",
-                      }}
-                    >
-                      {assessment.questions.length} questions ·{" "}
-                      {assessment.time_limit_minutes} minutes
-                    </p>
+          {assessments.length === 0 ? (
+            <div className="empty-state">
+              <p>No assessments created yet. Create your first assessment to get started.</p>
+            </div>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Assessment Name</th>
+                    <th>Time Limit</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assessments.map((row) => (
+                    <tr key={row.assessment_id}>
+                      <td className="cell-strong">{row.title}</td>
+                      <td>{row.time_limit_minutes ? `${row.time_limit_minutes} min` : "N/A"}</td>
+                      <td>{formatDate(row.start_date)}</td>
+                      <td>{formatDate(row.end_date)}</td>
+                      <td>
+                        <Badge variant={statusVariant(row.status)}>
+                          {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="interviews-panel">
+          <div className="panel-heading">
+            <h2>Upcoming Interviews</h2>
+            <CalendarClock size={18} className="panel-heading-icon" />
+          </div>
+
+          {acceptedInvitations.length === 0 ? (
+            <div className="empty-state">
+              <p>No upcoming interviews. Invitations that are accepted will appear here.</p>
+            </div>
+          ) : (
+            <ul className="interview-list">
+              {acceptedInvitations.map((inv) => (
+                <li className="interview-item" key={inv.invitation_id}>
+                  <span className="avatar interview-avatar">
+                    {inv.interviewee_id ? String(inv.interviewee_id).slice(0, 2).toUpperCase() : "??"}
+                  </span>
+                  <div className="interview-info">
+                    <div className="interview-name">
+                      {inv.title ? inv.title : `Candidate #${inv.interviewee_id}`}
+                      <Badge variant="success">Accepted</Badge>
+                    </div>
+                    <span className="interview-role">
+                      Assessment #{inv.assessment_id}
+                    </span>
+                    <span className="interview-time">
+                      {inv.responded_at
+                        ? `Accepted: ${formatDate(inv.responded_at)}`
+                        : `Invited: ${formatDate(inv.invited_at)}`}
+                    </span>
                   </div>
-
-                  <Badge
-                    variant={
-                      assessment.status === "published"
-                        ? "success"
-                        : "warning"
-                    }
-                  >
-                    {assessment.status === "published"
-                      ? "Published"
-                      : "Draft"}
-                  </Badge>
-                </div>
+                </li>
               ))}
-            </div>
-          </Card.Body>
-        </Card>
-
-        {/* Quick actions */}
-        <Card>
-          <Card.Header>
-            <h2 style={{ margin: 0 }}>Quick Actions</h2>
-          </Card.Header>
-
-          <Card.Body>
-            <div
-              style={{
-                display: "grid",
-                gap: "var(--space-3)",
-              }}
-            >
-              <Button block>Create Assessment</Button>
-
-              <Button variant="secondary" block>
-                Manage Questions
-              </Button>
-
-              <Button variant="outline" block>
-                View Candidates
-              </Button>
-            </div>
-          </Card.Body>
-        </Card>
+            </ul>
+          )}
+        </section>
       </div>
     </div>
   );
